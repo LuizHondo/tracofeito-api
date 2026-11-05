@@ -1,0 +1,229 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  user
+  creator
+  admin
+}
+
+enum TokenType {
+  verify_email
+  reset_password
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  username      String    @unique
+  bio           String    @default("")
+  passwordHash  String
+  role          Role      @default(user)
+  emailVerified Boolean   @default(false)
+  suspendedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  sessions      Session[]
+  tokens        Token[]
+  courses       Course[]
+  subscriptions Subscription[]
+  progress      PageProgress[]
+  creatorProfile CreatorProfile?
+  charges       Charge[]
+}
+
+model Session {
+  id        String   @id // sha256 of the cookie value
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model Token {
+  id        String    @id // sha256 of the emailed value
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      TokenType
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+}
+
+enum CouponType {
+  percent
+  fixed
+}
+
+enum PaymentType {
+  subscription
+  one_time
+}
+
+model Course {
+  id               String   @id @default(uuid())
+  ownerId          String
+  owner            User     @relation(fields: [ownerId], references: [id])
+  title            String
+  description      String   @default("")
+  coverUrl         String?
+  baseMonthlyCents Int
+  paymentType      PaymentType @default(subscription)
+  published        Boolean  @default(false)
+  featured         Boolean  @default(false) // admin-only
+  createdAt        DateTime @default(now())
+  plans            Plan[]
+  coupons          Coupon[]
+  pages            Page[]
+  blocks           Block[]
+  videos           Video[]
+  subscriptions    Subscription[]
+  charges          Charge[]
+
+  @@index([ownerId])
+}
+
+model Plan {
+  id              String @id @default(uuid())
+  courseId        String
+  course          Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  months          Int? // 1-12; null = lifetime
+  discountPercent Int    @default(0)
+  lifetimeCents   Int? // only for lifetime
+  subscriptions   Subscription[]
+
+  @@unique([courseId, months]) // one lifetime plan is enforced in the plans module (null months are distinct in SQL)
+}
+
+model Coupon {
+  id         String     @id @default(uuid())
+  courseId   String
+  course     Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  code       String
+  type       CouponType
+  value      Decimal    @db.Decimal(10, 2)
+  expiresAt  DateTime
+  canceledAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  @@index([courseId, code])
+}
+
+model Page {
+  id       String  @id @default(uuid())
+  courseId String
+  course   Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  parentId String?
+  parent   Page?   @relation("tree", fields: [parentId], references: [id], onDelete: Cascade)
+  children Page[]  @relation("tree")
+  title    String
+  slug     String
+  position Int
+  blocks   Block[]
+  progress PageProgress[]
+
+  @@index([courseId, parentId, position])
+}
+
+model Block {
+  id       String @id @default(uuid())
+  courseId String
+  course   Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  pageId   String? // null = block of the course's selling page
+  page     Page?   @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  position Int
+  type     String
+  config   Json
+
+  @@index([courseId, pageId, position])
+}
+
+model Subscription {
+  id         String    @id @default(uuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId   String
+  course     Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  planId     String?
+  plan       Plan?     @relation(fields: [planId], references: [id], onDelete: SetNull)
+  expiresAt  DateTime? // null = lifetime
+  canceledAt DateTime? // renewals canceled; access runs to expiresAt
+  createdAt  DateTime  @default(now())
+  charges    Charge[]
+
+  @@unique([userId, courseId])
+}
+
+model Video {
+  id        String   @id // host's video id
+  courseId  String
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  status    String   @default("processing") // processing | ready | failed
+  createdAt DateTime @default(now())
+
+  @@index([courseId])
+}
+
+model PageProgress {
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pageId      String
+  page        Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  completedAt DateTime @default(now())
+
+  @@id([userId, pageId])
+}
+
+model CreatorProfile {
+  userId        String   @id
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId     String // payment-provider sub-account
+  walletId      String
+  apiKey        String // sub-account key, used to read its onboarding status
+  payoutEnabled Boolean  @default(false) // provider reports payouts possible
+  createdAt     DateTime @default(now())
+}
+
+enum ChargeStatus {
+  pending
+  expired // unpaid past its due date; a late payment is still honored
+  paid
+  refunded
+}
+
+/// One provider charge. The subscription only exists once a first charge is paid.
+model Charge {
+  id             String       @id @default(uuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId       String
+  course         Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  planId         String?
+  subscriptionId String?
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull) // refunded lifetime removes the subscription, charges stay
+  amountCents    Int
+  months         Int? // months granted; null = lifetime
+  netCents       Int? // received after provider costs, from the payment webhook
+  providerId     String       @unique
+  url            String       @default("") // provider payment link
+  buyerName      String? // kept so the renewal job can charge without the user present
+  buyerCpfCnpj   String?
+  status         ChargeStatus @default(pending)
+  dueAt          DateTime
+  paidAt         DateTime?
+  refundedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([userId, courseId])
+}
+
+/// Provider webhook events already applied; the unique id makes redelivery a no-op.
+model ProviderEvent {
+  id        String   @id
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tracofeito
+      POSTGRES_USER: tf
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql   # named volume: survives redeploys. Never run `down -v`.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tf -d tracofeito"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://tf:${POSTGRES_PASSWORD}@postgres:5432/tracofeito
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+
+volumes:
+  pgdata:
