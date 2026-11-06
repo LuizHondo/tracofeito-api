@@ -1,0 +1,45 @@
+# Remaining before / around launch
+
+Implementation work lives in openspec/changes/add-course-marketplace/tasks.md.
+This file tracks what is NOT covered there, plus a summary of the tasks there that are still open
+(built but unverified, or blocked on outside input).
+
+## Legal and business
+- [ ] Lawyer: confirm consumer-law refund/withdrawal rules for online sales (7-day right?) and whether a refund policy is mandatory
+- [ ] Accountant: who issues invoices (nota fiscal) per sale, tax treatment of a marketplace with no platform fee
+- [ ] Write terms of use and privacy policy (LGPD)
+- [ ] Decide the business model: there is currently no platform fee, so the platform earns nothing from sales
+
+## Decisions still open
+- [ ] Verify exact package versions against the stack skill (Next, React, Prisma, Express, Zod, Tailwind) before scaffolding
+- [ ] Confirm assumptions I added: email verification required before buying/creating courses; progress kept through refunds; only admins delete courses; unpublishing keeps subscriber access
+- [ ] Hosting choice for web, API and Postgres (web and API must share a parent domain for the session cookie)
+- [ ] Backups and monitoring for Postgres and the renewal job
+
+## Risks to retire early
+- [ ] Asaas sandbox spike (tasks.md 7.1), partly done, findings in design.md. Still open: (a) set ASAAS_SPIKE_DEST_WALLET_ID in apps/api/.env to the wallet of a second sandbox account (not the CNPJ account's own) and re-run the split/refund-reversal check; (b) ask Asaas to enable sub-accounts on the sandbox account (CNPJ/MEI still gets 403 on POST /accounts); (c) decide how to handle boleto, which the API cannot refund (block it or refund manually)
+- [ ] Move renewal scheduler from node-cron to a job queue (e.g. pg-boss) before running more than one API instance
+- [ ] Check Bunny Stream limits and cost per minute against expected creator uploads
+
+## Open tasks from add-course-marketplace (tasks.md)
+Built but not verified, so the boxes in tasks.md stay unchecked:
+- [ ] 7.1 Asaas sandbox spike (see "Risks to retire early" above)
+- [ ] 11.2 Checkout: verify a sandbox purchase end to end (needs 7.1)
+- [ ] 11.3 Members area: click through sidebar, content, prev/next, mark complete, video player and gating
+- [ ] 11.4 Creator side: create a course with payout details, then plans, pages and a coupon; check /estudio/painel (payout status, income, refund button, subscribers)
+- [ ] 11.5 Account area: /conta/assinaturas (renew, cancel, history), expiry banner, admin screens
+- [ ] 12.1 End-to-end sandbox test: sign up, buy, access, renew, refund, access ends (needs 7.1)
+- [ ] 12.2 Clean staging deploy following docs/deploy.md
+
+## Unverified against the real Asaas
+- [ ] Webhook payload: event names (PAYMENT_CONFIRMED/RECEIVED/REFUNDED), id field, and payment.netValue (feeds "received after provider costs" in the income view)
+- [ ] Sub-account creation fields, GET /myAccount/status "general: APPROVED" as the payout-enabled signal
+- [ ] Boleto cannot be refunded via the API: decide to block boleto or refund manually (refund_failed is returned today)
+
+## Housekeeping
+- [ ] Rotate both Asaas sandbox API keys (they were pasted into a Claude session) once testing is done; the current one is in apps/api/.env
+
+## Later ideas (out of scope now)
+- [ ] Card tokenization for automatic renewals
+- [ ] Paid featured placement
+- [ ] Creator analytics beyond income and progress
