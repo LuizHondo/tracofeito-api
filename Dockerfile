@@ -6,6 +6,6 @@ RUN npm ci
 COPY . .
 RUN npx prisma generate
 ENV NODE_ENV=production
-EXPOSE 4000
+EXPOSE 3000
 # Migrate, seed mock data only when the DB is empty, then start. ponytail: one instance only (in-process renewal cron).
 CMD ["sh", "-c", "npx prisma migrate deploy && SEED_IF_EMPTY=1 npx tsx prisma/seed.ts && exec npx tsx src/server.ts"]

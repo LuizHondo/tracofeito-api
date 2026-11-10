@@ -18,12 +18,13 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
+      PORT: 3000   # fixed inside the container; change only the host side below
       DATABASE_URL: postgresql://tf:${POSTGRES_PASSWORD}@postgres:5432/tracofeito
     depends_on:
       postgres:
         condition: service_healthy
     ports:
-      - "4000:4000"
+      - "3001:3000"   # host:container
 
 volumes:
   pgdata:
